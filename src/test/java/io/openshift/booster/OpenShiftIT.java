@@ -16,42 +16,45 @@
 
 package io.openshift.booster;
 
-import java.util.concurrent.TimeUnit;
+import io.fabric8.kubernetes.api.model.v2_2.Pod;
+import io.fabric8.openshift.clnt.v2_2.OpenShiftClient;
+import org.arquillian.cube.openshift.impl.requirement.RequiresOpenshift;
+import org.arquillian.cube.requirement.ArquillianConditionalRunner;
+import org.assertj.core.api.Assertions;
+import org.jboss.arquillian.test.api.ArquillianResource;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
-import com.jayway.restassured.RestAssured;
-import com.jayway.restassured.response.Response;
-import io.openshift.booster.test.OpenShiftTestAssistant;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import java.util.List;
+import java.util.stream.Collectors;
 
-import static com.jayway.awaitility.Awaitility.await;
-import static com.jayway.restassured.RestAssured.get;
+@RunWith(ArquillianConditionalRunner.class)
+@RequiresOpenshift
+public class OpenShiftIT {
 
-public class OpenShiftIT extends AbstractBoosterApplicationTest {
+	@ArquillianResource
+	OpenShiftClient client;
 
-    private static OpenShiftTestAssistant assistant = new OpenShiftTestAssistant();
+	@Test
+	public void testRunningPod() throws Exception {
+		System.out.println("Test pod is running.");
+		System.out.println("OpenShift client version: " + this.client.getClass());
+		Assertions.assertThat(findPods().iterator()
+				.next()
+				.getStatus()
+				.getPhase())
+				.isEqualToIgnoringCase("running");
+	}
 
-    @BeforeClass
-    public static void prepare() throws Exception {
-        assistant.deployApplication();
-        assistant.awaitApplicationReadinessOrFail();
-
-        await().atMost(5, TimeUnit.MINUTES)
-                .until(() -> {
-                    try {
-                        Response response = get();
-                        return response.getStatusCode() < 500;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                });
-
-        RestAssured.baseURI = RestAssured.baseURI + "/api/greeting";
-    }
-
-    @AfterClass
-    public static void cleanup() {
-        assistant.cleanup();
-    }
+	private List<Pod> findPods() {
+		return this.client.pods()
+				.list()
+				.getItems()
+				.stream()
+				.filter(pod -> !pod.getMetadata()
+						.getName()
+						.contains("build"))
+				.collect(Collectors.toList());
+	}
 
 }
